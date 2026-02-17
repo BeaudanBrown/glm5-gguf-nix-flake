@@ -38,12 +38,9 @@
           ];
 
           shellHook = ''
-            set -eu
-
             export PROJECT_DIR="$PWD"
             export MODELS_DIR="$PROJECT_DIR/.models"
 
-            # Hugging Face cache to a project-local directory.
             export HF_HOME="$MODELS_DIR/hf"
             export HF_HUB_CACHE="$HF_HOME/hub"
             export HUGGINGFACE_HUB_CACHE="$HF_HUB_CACHE"
@@ -51,20 +48,32 @@
 
             mkdir -p "$HF_HUB_CACHE" "$TRANSFORMERS_CACHE" "$MODELS_DIR/gguf"
 
+            # Host NVIDIA driver libraries (non-NixOS / HPC).
+            export LD_LIBRARY_PATH="/lib64''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
             echo "Model dir: $MODELS_DIR"
             echo "HF cache : $HF_HUB_CACHE"
             echo ""
-            echo "Download:"
-            echo "  hf download unsloth/GLM-5-GGUF --cache-dir $HF_HUB_CACHE"
-            echo ""
-            echo "Run (single GPU):"
-            echo "  llama-cli -m ./.models/gguf/<file>.gguf -ngl 99 -c 8192 -p \"Hello\""
-            echo ""
-            echo "Run (2x A100):"
-            echo "  llama-cli -m ./.models/gguf/<file>.gguf -ngl 99 --tensor-split 1,1 -c 8192 -p \"Hello\""
-            echo ""
-            echo "Server (OpenAI-ish HTTP):"
-            echo "  llama-server -m ./.models/gguf/<file>.gguf -ngl 99 --tensor-split 1,1 -c 8192 --port 8000"
+            if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+              echo "GPUs detected:"
+              nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader 2>/dev/null | while read -r line; do
+                echo "  $line"
+              done
+              GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l)
+              SPLIT=$(printf '1%.0s' $(seq 1 "$GPU_COUNT") | sed 's/./&,/g;s/,$//')
+              echo ""
+              echo "Download:"
+              echo "  huggingface-cli download unsloth/GLM-5-GGUF --local-dir $MODELS_DIR/gguf"
+              echo ""
+              echo "Run (all $GPU_COUNT GPUs):"
+              echo "  llama-cli -m ./.models/gguf/<file>.gguf -ngl 99 --tensor-split $SPLIT -c 8192 -p \"Hello\""
+              echo ""
+              echo "Server (OpenAI-compatible HTTP):"
+              echo "  llama-server -m ./.models/gguf/<file>.gguf -ngl 99 --tensor-split $SPLIT -c 8192 --port 8000"
+            else
+              echo "WARNING: nvidia-smi not available. NVIDIA devices may not be bound into the sandbox."
+              echo "Make sure NIXSA_BWRAP_ARGS is set (see nixsa-gpu-setup.sh)."
+            fi
           '';
         };
       });
