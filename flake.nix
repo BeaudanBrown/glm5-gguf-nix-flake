@@ -49,7 +49,33 @@
             mkdir -p "$HF_HUB_CACHE" "$TRANSFORMERS_CACHE" "$MODELS_DIR/gguf"
 
             # Host NVIDIA driver libraries (non-NixOS / HPC).
-            export LD_LIBRARY_PATH="/lib64''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            #
+            # On this HPC the NVIDIA .so files live in /lib64 alongside the
+            # system glibc/libstdc++.  Adding all of /lib64 to LD_LIBRARY_PATH
+            # shadows the Nix-provided C library and causes
+            #   "GLIBC_2.38 not found" errors.
+            #
+            # Fix: create a private directory containing symlinks to *only* the
+            # NVIDIA/CUDA driver libraries, and put that on LD_LIBRARY_PATH.
+            _nv_stubs="$PROJECT_DIR/.nv-driver-libs"
+            rm -rf "$_nv_stubs"
+            mkdir -p "$_nv_stubs"
+            _found=0
+            for _src in /lib64 /usr/lib64 /usr/lib/x86_64-linux-gnu; do
+              for _so in \
+                "$_src"/libcuda.so* \
+                "$_src"/libcudadebugger.so* \
+                "$_src"/libcuda_wrapper.so* \
+                "$_src"/libnvidia*.so* \
+                "$_src"/libnvcuvid.so* \
+                "$_src"/libvdpau_nvidia.so* ; do
+                [ -e "$_so" ] && ln -sf "$_so" "$_nv_stubs/" && _found=1
+              done
+            done
+            if [ "$_found" -eq 1 ]; then
+              export LD_LIBRARY_PATH="''${_nv_stubs}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            fi
+            unset _nv_stubs _found _src _so
 
             echo "Model dir: $MODELS_DIR"
             echo "HF cache : $HF_HUB_CACHE"

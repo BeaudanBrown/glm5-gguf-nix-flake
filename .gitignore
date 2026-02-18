@@ -1,4 +1,5 @@
 .models/
 .direnv/
+.nv-driver-libs/
 result
 result-*
