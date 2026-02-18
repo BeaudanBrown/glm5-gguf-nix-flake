@@ -102,15 +102,13 @@
               done
               GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l)
               SPLIT=$(seq 1 "$GPU_COUNT" | awk 'BEGIN{ORS=","} {print 1}' | sed 's/,$//')
-              echo ""
-              echo "Download:"
-              echo "  huggingface-cli download unsloth/GLM-5-GGUF --local-dir $MODELS_DIR/gguf"
-              echo ""
-              echo "Run (all $GPU_COUNT GPUs):"
-              echo "  llama-cli -m ./.models/gguf/<file>.gguf -ngl 99 --tensor-split $SPLIT -c 8192 -p \"Hello\""
-              echo ""
-              echo "Server (OpenAI-compatible HTTP):"
-              echo "  llama-server -m ./.models/gguf/<file>.gguf -ngl 99 --tensor-split $SPLIT -c 8192 --port 8000"
+
+              # CPU threading: use half physical cores for generation (memory-bandwidth
+              # bound), full cores for prompt processing (compute bound).
+              CPU_CORES=$(nproc 2>/dev/null || echo 8)
+              T_GEN=$(( CPU_CORES / 2 ))
+              T_BATCH=$CPU_CORES
+
             else
               echo "WARNING: nvidia-smi not available. NVIDIA devices may not be bound into the sandbox."
               echo "Make sure NIXSA_BWRAP_ARGS is set (see nixsa-gpu-setup.sh)."
