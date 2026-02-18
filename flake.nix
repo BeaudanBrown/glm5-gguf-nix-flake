@@ -19,11 +19,13 @@
 
         # nixpkgs llama-cpp b7898 (2026-02-01) predates GLM-5 DSA arch support,
         # which landed upstream on 2026-02-14 (commit 752584d, PR #19460).
-        # Override the source to the first post-merge master commit that includes it.
+        # Pin to release b8087 (2026-02-18) which is the tagged release that
+        # includes it. Version must be a plain integer — nixpkgs uses it
+        # verbatim as LLAMA_BUILD_NUMBER in generated C++ code.
         llamaSrc = pkgs.fetchFromGitHub {
           owner = "ggml-org";
           repo  = "llama.cpp";
-          rev   = "e2f19b320fa358bb99cee41e2f4606f4ee93cc0c"; # 2026-02-17
+          rev   = "b8087";
           hash  = "sha256-M5J6RfOCYDn65fw+2mogvEiyc2UVA3STH86U8qInrQk=";
         };
 
@@ -31,7 +33,7 @@
           cudaSupport = true;
         }).overrideAttrs (_old: {
           src     = llamaSrc;
-          version = "git-e2f19b3";
+          version = "8087";
         });
 
         py = pkgs.python3.withPackages (ps: [
