@@ -17,9 +17,22 @@
           };
         };
 
-        llama = pkgs.llama-cpp.override {
-          cudaSupport = true;
+        # nixpkgs llama-cpp b7898 (2026-02-01) predates GLM-5 DSA arch support,
+        # which landed upstream on 2026-02-14 (commit 752584d, PR #19460).
+        # Override the source to the first post-merge master commit that includes it.
+        llamaSrc = pkgs.fetchFromGitHub {
+          owner = "ggml-org";
+          repo  = "llama.cpp";
+          rev   = "e2f19b320fa358bb99cee41e2f4606f4ee93cc0c"; # 2026-02-17
+          hash  = "sha256-M5J6RfOCYDn65fw+2mogvEiyc2UVA3STH86U8qInrQk=";
         };
+
+        llama = (pkgs.llama-cpp.override {
+          cudaSupport = true;
+        }).overrideAttrs (_old: {
+          src     = llamaSrc;
+          version = "git-e2f19b3";
+        });
 
         py = pkgs.python3.withPackages (ps: [
           ps.huggingface-hub
@@ -86,7 +99,7 @@
                 echo "  $line"
               done
               GPU_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l)
-              SPLIT=$(printf '1%.0s' $(seq 1 "$GPU_COUNT") | sed 's/./&,/g;s/,$//')
+              SPLIT=$(seq 1 "$GPU_COUNT" | awk 'BEGIN{ORS=","} {print 1}' | sed 's/,$//')
               echo ""
               echo "Download:"
               echo "  huggingface-cli download unsloth/GLM-5-GGUF --local-dir $MODELS_DIR/gguf"
