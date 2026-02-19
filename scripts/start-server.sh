@@ -154,7 +154,7 @@ CMD=(
   --ubatch-size "$UBATCH_SIZE"
   --threads "$THREADS"
   --threads-batch "$THREADS_BATCH"
-  --flash-attn
+  --flash-attn auto
   --metrics
   --fit on
 )
