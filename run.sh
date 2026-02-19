@@ -3,6 +3,9 @@
 #
 # Expects to be run from inside `nix develop` where MODELS_DIR is set.
 # Falls back to ./cache relative to the script location if MODELS_DIR is unset.
+#
+# Uses Q4_K_XL for best speed/quality balance on 4x L40S (180 GB VRAM).
+# Context is set to 65K — MLA keeps KV cache small (~5 GB at this size).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODELS_DIR="${MODELS_DIR:-$SCRIPT_DIR/cache}"
@@ -18,8 +21,11 @@ fi
 
 exec llama-cli -m "$MODEL_PATH" \
         --fit on \
-        --ctx-size 16384 \
-        --batch-size 512 \
-        --ubatch-size 128 \
+        --ctx-size 65536 \
+        --batch-size 2048 \
+        --ubatch-size 512 \
         --flash-attn auto \
-        --threads 95
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --threads 48 \
+        --threads-batch 96

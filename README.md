@@ -86,10 +86,12 @@ All configuration is via environment variables (see `.env.example`):
 | `TS_HOSTNAME` | `hpc-glm5` | Name on your tailnet |
 | `MODEL_PATH` | (auto-detect) | Path to GGUF model file |
 | `PORT` | `8080` | llama-server listen port |
-| `CTX_SIZE` | `16384` | Context window per slot |
+| `CTX_SIZE` | `65536` | Context window per slot |
 | `PARALLEL` | `2` | Number of parallel inference slots |
 | `BATCH_SIZE` | `2048` | Batch size for prompt processing |
 | `UBATCH_SIZE` | `512` | Micro-batch size |
+| `CACHE_TYPE_K` | `q8_0` | KV cache quantisation for keys |
+| `CACHE_TYPE_V` | `q8_0` | KV cache quantisation for values |
 | `THREADS` | `nproc/2` | CPU threads for generation |
 | `THREADS_BATCH` | `nproc` | CPU threads for batch processing |
 
@@ -120,7 +122,7 @@ Add a custom provider in your Claude Code settings:
 ## Parallel Slots & Subagents
 
 With `--parallel 2` (the default), llama-server maintains two independent
-inference slots. This enables:
+inference slots, each with a 65K token context window. This enables:
 
 - **Slot 0**: Main agent conversation
 - **Slot 1**: Subagent tasks (code search, summarisation)
@@ -129,22 +131,32 @@ When one slot is idle (waiting for tool results), the other gets full GPU
 throughput. This is nearly free at 5-10 tps since the slots alternate rather
 than competing.
 
+GLM-5 uses MLA (Multi-Latent Attention) with a compressed KV cache (~78 KB
+per token), so 2 slots at 65K context costs only ~10 GB total — a tiny
+fraction of the available VRAM.
+
 To increase parallelism: `PARALLEL=4 glm5-serve`
 
 ## Downloading the Model
 
+Q4_K_XL is the recommended quantisation for 4x L40S (180 GB VRAM).  It puts
+~42% of the model on GPU and gives ~2x inference speed over Q8_K_XL with
+negligible quality loss on this 744B MoE architecture.
+
 ```bash
 nix develop
-huggingface-cli download unsloth/GLM-5-GGUF --local-dir ./.models/gguf
-```
-
-Or download a specific quantisation:
-
-```bash
 huggingface-cli download unsloth/GLM-5-GGUF \
   --include "UD-Q4_K_XL/*" \
   --local-dir ./.models/gguf
 ```
+
+Other quantisations (adjust `--include` pattern):
+
+| Quant | Size | GPU offload (4x L40S) | Notes |
+|---|---|---|---|
+| `UD-Q4_K_XL` | 431 GB | ~42% | **Recommended** — best speed/quality |
+| `UD-Q5_K_XL` | 536 GB | ~34% | Slightly better quality, slower |
+| `UD-Q8_K_XL` | 869 GB | ~21% | Negligible quality gain, ~2x slower |
 
 ## Tailscale Userspace Mode
 

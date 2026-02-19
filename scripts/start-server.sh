@@ -11,17 +11,27 @@
 # is written to .connection-info after glm5-tailscale-up succeeds.
 # Override with HOST=<ip> to restrict to a specific interface.
 #
+# Tuning rationale (4x L40S, 180 GB total VRAM):
+#   GLM-5 uses MLA (Multi-Latent Attention) with kv_lora_rank=512, so the
+#   KV cache is only ~78 KB/token (78 layers * 512 dims * 2 bytes).  Context
+#   is essentially free — 65K tokens = ~5 GB KV cache.  The bottleneck is
+#   model weight memory bandwidth: Q4_K_XL (431 GB) lets ~42% of layers live
+#   on GPU vs ~21% at Q8_K_XL (869 GB), roughly doubling inference speed.
+#   KV cache quantisation (q8_0) halves the already-small cache further.
+#
 # Environment variables:
-#   MODEL_PATH     Path to GGUF file (auto-detected from cache/ if unset)
-#   HOST           Bind address (default: 0.0.0.0)
-#   PORT           Listen port (default: 8080)
-#   CTX_SIZE       Context window per slot (default: 16384)
-#   PARALLEL       Number of parallel slots (default: 2)
-#   BATCH_SIZE     Batch size (default: 2048)
-#   UBATCH_SIZE    Micro-batch size (default: 512)
-#   THREADS        Generation threads (default: half of nproc)
-#   THREADS_BATCH  Batch processing threads (default: nproc)
-#   EXTRA_ARGS     Additional llama-server arguments
+#   MODEL_PATH      Path to GGUF file (auto-detected from cache/ if unset)
+#   HOST            Bind address (default: 0.0.0.0)
+#   PORT            Listen port (default: 8080)
+#   CTX_SIZE        Context window per slot (default: 65536)
+#   PARALLEL        Number of parallel slots (default: 2)
+#   BATCH_SIZE      Batch size (default: 2048)
+#   UBATCH_SIZE     Micro-batch size (default: 512)
+#   CACHE_TYPE_K    KV cache type for keys (default: q8_0)
+#   CACHE_TYPE_V    KV cache type for values (default: q8_0)
+#   THREADS         Generation threads (default: half of nproc)
+#   THREADS_BATCH   Batch processing threads (default: nproc)
+#   EXTRA_ARGS      Additional llama-server arguments
 set -euo pipefail
 
 # ── Colour helpers ──────────────────────────────────────────────────────
@@ -107,16 +117,21 @@ THREADS_BATCH="${THREADS_BATCH:-$CPU_CORES}"
 # Server configuration
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8080}"
-CTX_SIZE="${CTX_SIZE:-16384}"
+CTX_SIZE="${CTX_SIZE:-65536}"
 PARALLEL="${PARALLEL:-2}"
 BATCH_SIZE="${BATCH_SIZE:-2048}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
+CACHE_TYPE_K="${CACHE_TYPE_K:-q8_0}"
+CACHE_TYPE_V="${CACHE_TYPE_V:-q8_0}"
+
+# Total context across all slots
+TOTAL_CTX=$(( CTX_SIZE * PARALLEL ))
 
 echo ""
 blue "Configuration:"
 echo "  Host:          $HOST:$PORT"
-echo "  Context/slot:  $CTX_SIZE tokens"
-echo "  Parallel:      $PARALLEL slots"
+echo "  Context/slot:  $CTX_SIZE tokens ($PARALLEL slots = $TOTAL_CTX total)"
+echo "  KV cache:      K=$CACHE_TYPE_K  V=$CACHE_TYPE_V"
 echo "  Batch:         $BATCH_SIZE / $UBATCH_SIZE"
 echo "  Threads:       $THREADS gen / $THREADS_BATCH batch"
 echo ""
@@ -134,6 +149,8 @@ CMD=(
   --threads "$THREADS"
   --threads-batch "$THREADS_BATCH"
   --flash-attn auto
+  --cache-type-k "$CACHE_TYPE_K"
+  --cache-type-v "$CACHE_TYPE_V"
   --metrics
   --fit on
 )
