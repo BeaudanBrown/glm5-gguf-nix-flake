@@ -5,9 +5,13 @@
 # llama-server with sensible defaults. All settings can be overridden via
 # environment variables.
 #
+# HOST defaults to the Tailscale IPv4 address so that the server is only
+# reachable over the tailnet (never on the public HPC network).  If Tailscale
+# is not running, the script exits rather than accidentally binding to 0.0.0.0.
+#
 # Environment variables:
-#   MODEL_PATH     Path to GGUF file (auto-detected from .models/ if unset)
-#   HOST           Bind address (default: 0.0.0.0)
+#   MODEL_PATH     Path to GGUF file (auto-detected from cache/ if unset)
+#   HOST           Bind address (default: Tailscale IPv4; must be set if no Tailscale)
 #   PORT           Listen port (default: 8080)
 #   CTX_SIZE       Context window per slot (default: 16384)
 #   PARALLEL       Number of parallel slots (default: 2)
@@ -104,8 +108,24 @@ if [ "$GPU_COUNT" -gt 1 ]; then
   TENSOR_SPLIT=$(seq 1 "$GPU_COUNT" | awk 'BEGIN{ORS=","} {print 1}' | sed 's/,$//')
 fi
 
+# ── Resolve bind address from Tailscale ─────────────────────────────────
+# Default to the Tailscale IPv4 so the server is only reachable on the tailnet.
+# Pass HOST explicitly to override (e.g. HOST=127.0.0.1 for local-only).
+if [ -z "${HOST:-}" ]; then
+  TS_SOCKET="${TS_SOCKET:-${TS_STATE_DIR:-$PWD/.tailscale-state}/tailscaled.sock}"
+  if [ -S "$TS_SOCKET" ]; then
+    HOST=$(tailscale --socket="$TS_SOCKET" ip -4 2>/dev/null || true)
+  fi
+  if [ -z "${HOST:-}" ]; then
+    red "ERROR: HOST is not set and Tailscale is not running."
+    echo "  Start Tailscale first:  glm5-tailscale-up"
+    echo "  Or set HOST explicitly: HOST=<ip> glm5-serve"
+    exit 1
+  fi
+  green "Binding to Tailscale IP: $HOST"
+fi
+
 # Server configuration
-HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8080}"
 CTX_SIZE="${CTX_SIZE:-16384}"
 PARALLEL="${PARALLEL:-2}"

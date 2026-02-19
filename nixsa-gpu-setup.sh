@@ -1,6 +1,11 @@
 # nixsa GPU passthrough setup
 # Source this in your .bashrc or job script:
 #   source /path/to/nixsa-gpu-setup.sh
+#
+# This also exposes /dev/net/tun to the sandbox when available so that
+# Tailscale userspace-networking mode can function.  On HPC nodes where
+# /dev/net/tun does not exist, glm5-tailscale-up automatically falls back
+# to --tun=userspace-networking which requires no kernel TUN device at all.
 
 # Only set up if NVIDIA devices are present (i.e. on a GPU node).
 if [ -e /dev/nvidiactl ]; then
@@ -13,6 +18,14 @@ if [ -e /dev/nvidiactl ]; then
   for cap in /dev/nvidia-caps/*; do
     [ -e "$cap" ] && NIXSA_BWRAP_ARGS="$NIXSA_BWRAP_ARGS --dev-bind $cap $cap"
   done
+
+  # --- TUN device (needed for Tailscale kernel-mode; optional for userspace-networking) ---
+  # Expose /dev/net/tun when the host has it so that tailscaled can use the
+  # faster kernel path.  If it is absent the script falls back gracefully to
+  # --tun=userspace-networking which needs no kernel module or device node.
+  if [ -e /dev/net/tun ]; then
+    NIXSA_BWRAP_ARGS="$NIXSA_BWRAP_ARGS --dev-bind /dev/net/tun /dev/net/tun"
+  fi
 
   # --- NVIDIA driver libraries ---
   # Bind-mount each NVIDIA .so from the host into the sandbox so the

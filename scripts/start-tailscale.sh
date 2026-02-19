@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# start-tailscale.sh — Start Tailscale in userspace mode (no root required).
+# start-tailscale.sh — Start Tailscale in userspace-networking mode (no root required).
 #
-# This is designed for HPC environments where you don't have root access.
-# It uses --tun=userspace which avoids needing /dev/net/tun or any
-# kernel modules.
+# This is designed for HPC environments where you don't have root access and
+# /dev/net/tun is unavailable or the tun kernel module cannot be loaded.
+#
+# Uses --tun=userspace-networking which runs a full SOCKS5/HTTP proxy inside
+# the tailscaled process instead of creating a kernel TUN device.  No
+# iptables, no modprobe, no /dev/net/tun required.
+#
+# Note: In userspace-networking mode, only outbound connections from *this*
+# node work automatically.  Inbound connections (e.g. other tailnet peers
+# reaching the llama-server port) require explicitly binding the server to
+# the Tailscale IP rather than 0.0.0.0, or using `tailscale serve`.
 #
 # Environment variables:
 #   TS_AUTHKEY     Tailscale auth key (required on first run)
@@ -53,7 +61,7 @@ echo "  Log: $TS_LOG"
 echo ""
 
 tailscaled \
-  --tun=userspace \
+  --tun=userspace-networking \
   --socket="$TS_SOCKET" \
   --state="$TS_STATE_DIR/tailscaled.state" \
   --statedir="$TS_STATE_DIR" \

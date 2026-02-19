@@ -124,7 +124,7 @@
 
           shellHook = ''
             export PROJECT_DIR="$PWD"
-            export MODELS_DIR="$PROJECT_DIR/.models"
+            export MODELS_DIR="$PROJECT_DIR/cache"
 
             export HF_HOME="$MODELS_DIR/hf"
             export HF_HUB_CACHE="$HF_HOME/hub"
