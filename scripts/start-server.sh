@@ -104,12 +104,6 @@ CPU_CORES=$(nproc 2>/dev/null || echo 8)
 THREADS="${THREADS:-$(( CPU_CORES / 2 ))}"
 THREADS_BATCH="${THREADS_BATCH:-$CPU_CORES}"
 
-# Build tensor split string (equal split across all GPUs)
-TENSOR_SPLIT=""
-if [ "$GPU_COUNT" -gt 1 ]; then
-  TENSOR_SPLIT=$(seq 1 "$GPU_COUNT" | awk 'BEGIN{ORS=","} {print 1}' | sed 's/,$//')
-fi
-
 # Server configuration
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8080}"
@@ -125,7 +119,6 @@ echo "  Context/slot:  $CTX_SIZE tokens"
 echo "  Parallel:      $PARALLEL slots"
 echo "  Batch:         $BATCH_SIZE / $UBATCH_SIZE"
 echo "  Threads:       $THREADS gen / $THREADS_BATCH batch"
-[ -n "$TENSOR_SPLIT" ] && echo "  Tensor split:  $TENSOR_SPLIT"
 echo ""
 
 # Build command
@@ -144,14 +137,6 @@ CMD=(
   --metrics
   --fit on
 )
-
-# GPU-specific flags
-if [ "$GPU_COUNT" -gt 0 ]; then
-  CMD+=(--n-gpu-layers 999)
-  if [ -n "$TENSOR_SPLIT" ]; then
-    CMD+=(--tensor-split "$TENSOR_SPLIT")
-  fi
-fi
 
 # Append any extra args
 if [ -n "${EXTRA_ARGS:-}" ]; then
