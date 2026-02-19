@@ -93,8 +93,11 @@ fi
 # Bring the interface up
 blue "Running tailscale up..."
 
+TS_LOGIN_SERVER="${TS_LOGIN_SERVER:-https://hs.bepis.lol}"
+
 UP_CMD=(
   tailscale --socket="$TS_SOCKET" up
+  --login-server="$TS_LOGIN_SERVER"
   --hostname="$TS_HOSTNAME"
 )
 
