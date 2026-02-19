@@ -1,5 +1,10 @@
 .models/
 .direnv/
 .nv-driver-libs/
+.tailscale-state/
+.connection-info
+.env
+logs/
 result
 result-*
+cache/
