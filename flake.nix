@@ -4,9 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    llama-cpp.url = "github:unslothai/llama.cpp/86ebfef2c6a0f3359a2a07d2c215d61b0fa885c9";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, llama-cpp }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -17,28 +18,28 @@
           };
         };
 
-        # nixpkgs llama-cpp b7898 (2026-02-01) predates GLM-5 DSA arch support,
-        # which landed upstream on 2026-02-14 (commit 752584d, PR #19460).
-        # Pin to release b8087 (2026-02-18) which is the tagged release that
-        # includes it. Version must be a plain integer — nixpkgs uses it
-        # verbatim as LLAMA_BUILD_NUMBER in generated C++ code.
-        llamaSrc = pkgs.fetchFromGitHub {
-          owner = "ggml-org";
-          repo  = "llama.cpp";
-          rev   = "b8087";
-          hash  = "sha256-M5J6RfOCYDn65fw+2mogvEiyc2UVA3STH86U8qInrQk=";
-        };
-
-        llama = (pkgs.llama-cpp.override {
-          cudaSupport = true;
-        }).overrideAttrs (_old: {
-          src     = llamaSrc;
-          version = "8087";
-        });
+        # GLM-5.3-Flash support is not yet merged into upstream llama.cpp.
+        # Use the CUDA package from the exact Unsloth PR branch commit pinned
+        # by the flake input above, rather than applying that source to the
+        # older nixpkgs llama.cpp derivation.
+        llama = llama-cpp.packages.${system}.cuda;
 
         py = pkgs.python3.withPackages (ps: [
           ps.huggingface-hub
         ]);
+
+        downloadGlm53Flash = pkgs.writeShellApplication {
+          name = "download-glm53-flash";
+          runtimeInputs = [ py ];
+          text = ''
+            models_dir="''${MODELS_DIR:-$PWD/cache}"
+            exec huggingface-cli download unsloth/GLM-5.3-Flash-GGUF \
+              --revision 621d456e93e926e4b52f85cff5f634358c1828f9 \
+              --include 'UD-IQ4_XS/*.gguf' \
+              --local-dir "$models_dir/gguf/glm-5.3-flash-iq4-xs" \
+              "$@"
+          '';
+        };
 
         # -----------------------------------------------------------------
         # Wrapper scripts (installed as packages so they work with nix run)
@@ -88,6 +89,7 @@
           tailscale-up   = tailscaleUp;
           tailscale-down = tailscaleDown;
           health-check   = healthCheck;
+          download-glm53-flash = downloadGlm53Flash;
         };
 
         apps = {
@@ -110,6 +112,11 @@
           health = {
             type = "app";
             program = "${healthCheck}/bin/glm5-health";
+          };
+          # nix run .#download-glm53-flash
+          download-glm53-flash = {
+            type = "app";
+            program = "${downloadGlm53Flash}/bin/download-glm53-flash";
           };
         };
 
