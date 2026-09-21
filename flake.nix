@@ -22,7 +22,17 @@
         # Use the CUDA package from the exact Unsloth PR branch commit pinned
         # by the flake input above, rather than applying that source to the
         # older nixpkgs llama.cpp derivation.
-        llama = llama-cpp.packages.${system}.cuda;
+        llama = (llama-cpp.packages.${system}.cuda.override {
+          # The bundled web UI pulls hundreds of npm and cross-platform binary
+          # derivations into `nix develop`. It is unnecessary for this
+          # OpenAI-compatible API deployment and can exhaust nixsa's per-user
+          # sandbox file descriptors on HPC nodes.
+          useWebUi = false;
+        }).overrideAttrs (_old: {
+          # The upstream derivation retains the web UI as an input even when
+          # LLAMA_BUILD_WEBUI is false, so remove that unused dependency too.
+          webui = null;
+        });
 
         py = pkgs.python3.withPackages (ps: [
           ps.huggingface-hub
