@@ -33,7 +33,7 @@
           runtimeInputs = [ py ];
           text = ''
             models_dir="''${MODELS_DIR:-$PWD/cache}"
-            exec huggingface-cli download unsloth/GLM-5.3-Flash-GGUF \
+            exec hf download unsloth/GLM-5.3-Flash-GGUF \
               --revision 621d456e93e926e4b52f85cff5f634358c1828f9 \
               --include 'UD-IQ4_XS/*.gguf' \
               --local-dir "$models_dir/gguf/glm-5.3-flash-iq4-xs" \
